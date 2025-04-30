@@ -59,8 +59,11 @@ Rotation : 방향을 변경합니다. Random을 체크하고 Y축의 Min Rotation을 0으로 Max R
 ![easyme](/img/06.gif)  
 
 Rotate To Slope : 지형이나 오브젝트의 경사에 자동으로 맞춰줍니다. 기본설정은 활성화 되어있습니다.  
-![easyme](/img/07.gif)
-![easyme](/img/08.gif)  
+<p float="left">
+  <img src="/img/07.gif" width="45%" />
+  <img src="/img/08.gif" width="45%" />
+</p>
+
 위 이미지 처럼 한쪽은 묻히고 한쪽은 떠보이게 심어지는것을 방지합니다.  
 
 Slope Angle : 각도에 따라서 심어지는 디테일을 조절할수 있습니다.  
@@ -69,10 +72,17 @@ Slope Angle : 각도에 따라서 심어지는 디테일을 조절할수 있습니다.
 Prefab Scale : 디테일의 크기를 조절합니다. Min Scale과 Max Scale을 조절하면 정해진 사이즈만큼 랜덤하게 심어집니다. Multi로 변경할경우 X,Y,Z의 사이즈를 각각 조절할수 있습니다.  
 ![easyme](/img/10.gif)  
 
-Overlap Prevention : 디테일이 서로 겹치지 않도록 조절합니다.  
-![easyme](/img/11.gif)
-![easyme](/img/12.gif)  
-Scale를 2에 가까울 경우 왼쪽의 이미지 처럼 간격이 넓어지고 0에 가까울수록 간격이 좁아집니다.
+Overlap Prevention : 디테일이 서로 겹치지 않도록 조절합니다.
+  
+<p float="left">
+  <img src="/img/11.gif" width="45%" />
+  <img src="/img/12.gif" width="45%" />
+</p>
+
+<p>
+Scale를 2에 가까울 경우 왼쪽의 이미지처럼 간격이 넓어지고,  
+0에 가까울수록 간격이 좁아집니다.
+</p>
 
 -----
 #### Bake
@@ -88,7 +98,7 @@ Scale를 2에 가까울 경우 왼쪽의 이미지 처럼 간격이 넓어지고 0에 가까울수록 간격이
 
 ##### Terrain
 터레인으로 심었을경우 터레인과 비슷하게 디테일을 저장합니다. 텍스처기반으로 심어진 잔디와 오브젝트 기반의 디테일 모두 저장이 가능합니다.
-하지만 텍스처 기반의 경우는 인스턴스가 너무 많아질수 있고 기본 릿 쉐이더 기반으로 설정되기 때문에 추가 작업이 필요하기 대문에 추천하지는 않습니다.
+하지만 텍스처 기반의 경우는 인스턴스가 너무 많아질수 있고 기본 릿 쉐이더 기반으로 설정되기 때문에 추가 작업이 필요하기 때문에 추천하지는 않습니다.
 ![easyme](/img/007.png)  
 
 ![easyme](/img/18.gif)  
