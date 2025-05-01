@@ -28,8 +28,6 @@ public class GrassTypeData
 
     public List<LODLevel> lodLevels = new List<LODLevel>();
 
-    public Bounds frustumCullBounds = new Bounds(Vector3.zero, Vector3.one);
-
     public void LoadLODFromPrefab()
     {
         if (prefab == null)
@@ -67,19 +65,6 @@ public class GrassTypeData
                             mesh = mf.sharedMesh,
                             material = renderer.sharedMaterial
                         });
-
-                        if (i == 0)
-                        {
-                            Bounds meshBounds = mesh.bounds;
-                            Vector3 worldScale = renderer.transform.lossyScale;
-                            Vector3 scaledSize = Vector3.Scale(meshBounds.size, worldScale);
-                            Bounds worldBounds = new Bounds(renderer.transform.position + meshBounds.center, scaledSize);
-
-                            if (lodLevels.Count == 0)
-                                frustumCullBounds = worldBounds;
-                            else
-                                frustumCullBounds.Encapsulate(worldBounds);
-                        }
                     }
                 }
 
@@ -107,11 +92,6 @@ public class GrassTypeData
                     }
                     };
                     lodLevels.Add(level);
-
-                    Bounds meshBounds = mf.sharedMesh.bounds;
-                    Vector3 worldScale = renderer.transform.lossyScale;
-                    Vector3 scaledSize = Vector3.Scale(meshBounds.size, worldScale);
-                    frustumCullBounds = new Bounds(renderer.transform.position + meshBounds.center, scaledSize);
                 }
             }
         }

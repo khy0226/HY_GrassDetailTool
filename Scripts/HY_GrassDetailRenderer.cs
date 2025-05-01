@@ -222,6 +222,11 @@ public class HY_GrassDetailRenderer : MonoBehaviour
         Vector3 camPos = cam.transform.position;
         float cullDistSqr = grassDataList.maxCullDistance * grassDataList.maxCullDistance;
         Plane[] frustumPlanes = GeometryUtility.CalculateFrustumPlanes(cam);
+        float frustumPadding = 0.5f;
+        for (int i = 0; i < frustumPlanes.Length; i++)
+        {
+            frustumPlanes[i].distance += frustumPadding;
+        }
 
         foreach (var zone in grassDataList.zones)
         {
@@ -264,11 +269,7 @@ public class HY_GrassDetailRenderer : MonoBehaviour
                 {
                     Vector3 pos = matrices[i].GetColumn(3);
 
-                    Vector3 scale = new Vector3(matrices[i].GetColumn(0).magnitude,
-                        matrices[i].GetColumn(1).magnitude,
-                        matrices[i].GetColumn(2).magnitude
-                        );
-                    Bounds b = new Bounds(pos + typeData.frustumCullBounds.center, Vector3.Scale(typeData.frustumCullBounds.size, scale));
+                    Bounds b = new Bounds(pos, new Vector3(1, 1, 1));
                     if (!GeometryUtility.TestPlanesAABB(frustumPlanes, b))
                         continue;
 
