@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: 001db56aeb682e440b622e241bcdcf2e
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - grassDataList: {instanceID: 0}
+  - ditheringTex: {instanceID: 0}
+  - GrassCompute: {fileID: 7200000, guid: 55f88c94e54a9ff45b48f18f64b4d0be, type: 3}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

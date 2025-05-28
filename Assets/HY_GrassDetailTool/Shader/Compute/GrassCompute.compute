@@ -1,0 +1,85 @@
+#pragma kernel CSMain
+
+struct GrassInstanceInput 
+{
+    float3 position;
+    float4 rotation;
+    float3 scale;
+};
+
+struct DrawData 
+{
+    float3 position;
+    float4 rotation;
+    float3 scale;
+};
+
+struct FrustumPlane 
+{
+    float4 plane; 
+};
+
+StructuredBuffer<GrassInstanceInput> _InputData;
+StructuredBuffer<float4> _FrustumPlanes;
+
+AppendStructuredBuffer<DrawData> _DrawDatasLOD0;
+AppendStructuredBuffer<DrawData> _DrawDatasLOD1;
+AppendStructuredBuffer<DrawData> _DrawDatasLOD2;
+
+RWStructuredBuffer<uint> _ArgsBufferLOD0;
+RWStructuredBuffer<uint> _ArgsBufferLOD1;
+RWStructuredBuffer<uint> _ArgsBufferLOD2;
+
+
+cbuffer CameraData
+{
+    float3 _CameraPos;
+    float _MaxDistance;
+    float _LOD0Distance;
+    float _LOD1Distance;
+};
+
+bool IsInsideFrustum(float3 pos)
+{
+    for (int i = 0; i < 6; i++)
+    {
+        float4 p = _FrustumPlanes[i];
+
+        if (dot(p.xyz, pos) + p.w < -1)
+            return false;
+    }
+    return true;
+}
+
+[numthreads(64, 1, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+    uint i = id.x;
+    if (i >= _InputData.Length) return;
+
+    GrassInstanceInput input = _InputData[i];
+    float dist = distance(input.position, _CameraPos);
+    if (dist > _MaxDistance) return;
+    if (!IsInsideFrustum(input.position)) return;
+
+    DrawData data;
+    data.position = input.position;
+    data.rotation = input.rotation;
+    data.scale = input.scale;
+
+    if (dist <= _LOD0Distance)
+    {
+        _DrawDatasLOD0.Append(data);
+        InterlockedAdd(_ArgsBufferLOD0[1], 1);
+    }
+    else if (dist <= _LOD1Distance)
+    {
+        _DrawDatasLOD1.Append(data);
+        InterlockedAdd(_ArgsBufferLOD1[1], 1);
+    }
+    else
+    {
+        _DrawDatasLOD2.Append(data);
+        InterlockedAdd(_ArgsBufferLOD2[1], 1);
+    }
+}

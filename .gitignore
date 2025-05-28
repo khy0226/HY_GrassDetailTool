@@ -1,0 +1,10 @@
+/Library
+/Temp
+/UserSettings
+/Packages
+/obj
+/Logs
+.vsconfig
+Assembly-CSharp-Editor.csproj
+Assembly-CSharp.csproj
+HY_GrassDetailTool.sln

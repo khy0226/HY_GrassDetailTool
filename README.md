@@ -17,11 +17,21 @@ GPU 인스턴싱으로 렌더링 해주는 툴입니다.
 * GPU Instancing을 사용하는 모든 쉐이더에서 사용 가능합니다.
 * 하이라키에 심는방식과 비교하면 용량이 크게 줄어듭니다.
 * 모바일 환경에 최적화 되어있습니다.
+------
+
+##### 수정사항
+5월 29일  
+* 터레인에서 베이크 할때 속도 증가
+* 존 분할 통합 속도 증가
+* Draw Mesh Instanced Indirect 추가
+
+
 
 ------
 ![easyme](/img/001.png)  
 ![easyme](/img/002.png)  
 ![easyme](/img/003.png)  
+![easyme](/img/in06.png)  
 
 ------
 사용방법
@@ -127,7 +137,8 @@ Y Offset : 디테일이 심어지는 깊이를 조절합니다.
 Overlap Prevention : 디테일이 서로 겹치지 않도록 조절합니다.
 
 -----
-## Grass Detail Renderer
+## Grass Detail Renderer  
+### Draw Mesh Instanced
 잔디 렌더링을 하기 위해서 하이라키에서 Create Empty를 생성합니다.  
 ![easyme](/img/010.png)  
  Add Component를 눌러서 HY_GrassDetailRenderer를 추가합니다.  
@@ -162,3 +173,22 @@ Transition Distance : LOD가 바뀌는 거리를 조절합니다. 프리팹에 LOD Group의 설정�
 
 #### 등록된 존
 이 데이터에 등록된 존과 각 존별로 할당되어 있는 잔디갯수를 보여줍니다.
+
+### Draw Mesh Instanced Indirect
+![easyme](/img/in02.png)  
+![easyme](/img/in03.png)  
+![easyme](/img/in07.png)  
+
+#### Draw Mesh Instanced와 차이점
+Draw Mesh Instanced는 렌더링은 GPU에서 하지만 LOD, 컬링, 최대거리와 같은 관리는 CPU를 사용하기때문에 잔디를 너무 많이 심게되면 CPU 사용량이 급격하게 늘어납니다.  
+Draw Mesh Instanced Indirect는 모든것을 GPU에서 관리하기 때문에 무수히 많은 잔디를 렌더링 하게되면 더욱 빠른 속도로 렌더링 하게 됩니다.  
+
+#### 사용방법
+![easyme](/img/in01.png)  
+사용 방법은 Draw Mesh Instanced를 Draw Mesh Instanced Indirect로 바꿔 주시면 됩니다.  
+주의사항으로는 대부분의 쉐이더는 자동으로 변경해주지만 쉐이더그래프의 경우는 직접 변경해주셔야 합니다.
+
+![easyme](/img/in08.png)  
+서브그래프 HY_DrawMeshInstancedIndirect를 Vertex Position에 연결하면 됩니다.  
+가능하면 쉐이더그래프를 복사하고 이름 뒤에 (GPUMode)를 붙여주는것을 추천합니다.
+ 
