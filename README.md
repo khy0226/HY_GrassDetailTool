@@ -192,3 +192,10 @@ Draw Mesh Instanced Indirect는 모든것을 GPU에서 관리하기 때문에 무수히 많은 잔디
 서브그래프 HY_DrawMeshInstancedIndirect를 Vertex Position에 연결하면 됩니다.  
 가능하면 쉐이더그래프를 복사하고 이름 뒤에 (GPUMode)를 붙여주는것을 추천합니다.
  
+
+-----
+
+#### Reference 
+<https://gist.github.com/ArieLeo/d7e6bc5485caa9ba99cd3a59d0f53404>  
+<https://github.com/ColinLeung-NiloCat/UnityURP-MobileDrawMeshInstancedIndirectExample>
+<https://assetstore.unity.com/packages/tools/utilities/gpu-instancer-117566>
