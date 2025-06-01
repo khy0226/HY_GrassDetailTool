@@ -26,7 +26,7 @@ GPU 인스턴싱으로 렌더링 해주는 툴입니다.
 * Draw Mesh Instanced Indirect 추가
 
 ##### 주의사항
-Windows, Max, Lunux(StandAlone)에서는 씬뷰에서 드로우콜이 누적되는 문제가 있어서 Max Cull Distance를 낮춰서 작업해주세요.  
+Windows, Max, Lunux(StandAlone)에서는 씬뷰에서 드로우콜이 누적되는 문제가 있어서 Max Cull Distance를 낮춰서 작업해주세요. 게임 플레이에는 문제 없습니다.  
 안드로이드는 문제 없습니다.
 
 ------
