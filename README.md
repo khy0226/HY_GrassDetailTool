@@ -25,7 +25,9 @@ GPU 인스턴싱으로 렌더링 해주는 툴입니다.
 * 존 분할 통합 속도 증가
 * Draw Mesh Instanced Indirect 추가
 
-
+##### 주의사항
+Windows, Max, Lunux(StandAlone)에서는 씬뷰에서 드로우콜이 누적되는 문제가 있어서 Max Cull Distance를 낮춰서 작업해주세요.  
+안드로이드는 문제 없습니다.
 
 ------
 ![easyme](/img/001.png)  
@@ -138,6 +140,7 @@ Overlap Prevention : 디테일이 서로 겹치지 않도록 조절합니다.
 
 -----
 ## Grass Detail Renderer  
+
 ### Draw Mesh Instanced
 잔디 렌더링을 하기 위해서 하이라키에서 Create Empty를 생성합니다.  
 ![easyme](/img/010.png)  
