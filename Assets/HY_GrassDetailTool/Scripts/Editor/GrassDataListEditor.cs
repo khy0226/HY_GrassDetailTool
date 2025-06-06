@@ -366,7 +366,9 @@ public class GrassDataListEditor : Editor
         var defaultZone = data.zones.FirstOrDefault(z => z.zoneName == "_DefaultZone");
         if (defaultZone == null) return;
 
-        // Zone_0_0만 남아있는 상태인지 확인
+        int prevZoneCount = data.zones.Count;
+
+
         bool isMergedOnly = data.zones.Count == 2 && data.zones.Any(z => z.zoneName == "Zone_0_0");
 
         List<(GameObject prefab, GrassData grass)> allInstances = new();
@@ -391,7 +393,10 @@ public class GrassDataListEditor : Editor
         }
 
         data.zones.RemoveAll(zone => zone.zoneName != "_DefaultZone" && (zone.instanceGroups == null || zone.instanceGroups.Count == 0));
-        RecalculateZoneCenters(data);
+        if (data.zones.Count > prevZoneCount)
+        {
+            RecalculateZoneCenters(data);
+        }
     }
 
     public static void RecalculateZoneCenters(GrassDataList data)

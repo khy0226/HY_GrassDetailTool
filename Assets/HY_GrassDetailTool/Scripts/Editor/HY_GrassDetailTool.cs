@@ -43,6 +43,8 @@ public class HY_GrassDetailTool : EditorWindow
 
     private const float MAX_PAINTED_DENSITY_IN_CELL = 255;
 
+    [HideInInspector]private bool isGrassUpdatePending = false;
+
     private Vector2 scrollPositionBrush;
     private float brushSize = 1f;
     private bool brushSizeFoldout = false;
@@ -1462,8 +1464,7 @@ private float GetPrefabVisualSize(GameObject prefab)
                     lastPlantedPosition = Vector3.positiveInfinity;
                 }
             }
-
-                SceneView.RepaintAll();
+            SceneView.RepaintAll();
         }
     }
 
@@ -1526,7 +1527,6 @@ private float GetPrefabVisualSize(GameObject prefab)
         grassDataList.AddToZoneInstanceGroup("_DefaultZone", targetType.prefab, newGrass);
         GrassDataListEditor.AutoDistributeDefaultZone(grassDataList);
 
-        // 즉시 렌더링 적용
         ApplyGrassChanges();
     }
 
@@ -1574,33 +1574,66 @@ private float GetPrefabVisualSize(GameObject prefab)
         }
     }
 
-
     private void ApplyGrassChanges()
     {
-        if (grassDataList == null) return;
-
-#if UNITY_EDITOR
-        EditorUtility.SetDirty(grassDataList);
-        // 잔디 심을 때 Asset 저장하지 않음 (느려지는 원인 제거)
-#endif
-
-        HY_GrassDetailRenderer renderer = FindObjectOfType<HY_GrassDetailRenderer>();
-        if (renderer != null)
+        if (prefabDensity <= 1)
         {
-            if (renderer.grassDataList != grassDataList)
-            {
-                renderer.SetGrassData(grassDataList);
-            }
-            renderer.ForceEnableRender();
-            renderer.ApplyInstanceUpdate(); // 데이터만 업데이트 (전체 로딩 X)
-            renderer.RenderGrass();
+            if (grassDataList == null) return;
 
-            // 씬 뷰 갱신 (꺼졌다 켜지는 문제 해결)
 #if UNITY_EDITOR
-            SceneView.RepaintAll(); // 씬 뷰 강제 리프레시 (정상 작동)
+            EditorUtility.SetDirty(grassDataList);
 #endif
+
+            HY_GrassDetailRenderer renderer = FindObjectOfType<HY_GrassDetailRenderer>();
+            if (renderer != null)
+            {
+                if (renderer.grassDataList != grassDataList)
+                {
+                    renderer.SetGrassData(grassDataList);
+                }
+                renderer.ForceEnableRender();
+                renderer.ApplyInstanceUpdate();
+                renderer.RenderGrass();
+#if UNITY_EDITOR
+                SceneView.RepaintAll(); 
+#endif
+            }
+        }
+
+        else
+        {
+            if (isGrassUpdatePending) return;
+            isGrassUpdatePending = true;
+
+            EditorApplication.delayCall += () =>
+            {
+                if (grassDataList == null) return;
+
+#if UNITY_EDITOR
+                EditorUtility.SetDirty(grassDataList);
+#endif
+
+                HY_GrassDetailRenderer renderer = FindObjectOfType<HY_GrassDetailRenderer>();
+                if (renderer != null)
+                {
+                    if (renderer.grassDataList != grassDataList)
+                        renderer.SetGrassData(grassDataList);
+
+                    renderer.ForceEnableRender();
+                    renderer.ApplyInstanceUpdate();
+                    renderer.RenderGrass();
+
+#if UNITY_EDITOR
+                    SceneView.RepaintAll();
+#endif
+                }
+
+                isGrassUpdatePending = false;
+            };
         }
     }
+
+
 
     private void SelectPrefab(int index)
     {
