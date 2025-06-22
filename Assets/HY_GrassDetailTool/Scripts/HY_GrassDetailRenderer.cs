@@ -47,10 +47,10 @@ public class HY_GrassDetailRenderer : MonoBehaviour
 
     private void OnDisable()
     {
+        ReleaseBuffers();
 #if UNITY_EDITOR
         SceneView.duringSceneGui -= OnSceneGUI;
 #endif
-        ReleaseBuffers();
     }
 
     private void LateUpdate()
@@ -77,9 +77,10 @@ public class HY_GrassDetailRenderer : MonoBehaviour
 
     private void OnSceneGUI(SceneView sceneView)
     {
+
         if (!Application.isPlaying && hasGrassData)
         {
-            RenderGrass(); // Handles.BeginGUI() 제거
+            RenderGrass();
         }
     }
 
