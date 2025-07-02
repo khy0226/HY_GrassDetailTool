@@ -26,6 +26,7 @@ public class GrassTypeData
     public GameObject prefab;
     public bool hasShadow = true;
 
+
     public List<LODLevel> lodLevels = new List<LODLevel>();
 
     public void LoadLODFromPrefab(bool preserveTransition = true)
@@ -102,7 +103,7 @@ public class GrassTypeData
                 }
             }
         }
-            hasShadow = DetectShadowFromPrefab(prefab);
+        hasShadow = DetectShadowFromPrefab(prefab);
     }
 
 
@@ -242,6 +243,5 @@ public class GrassData
     public Vector3 position;
     public Quaternion rotation;
     public Vector3 scale;
-    public int prefabIndex;
-
+    public Bounds baseBounds;
 }

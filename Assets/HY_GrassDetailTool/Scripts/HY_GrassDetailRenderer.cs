@@ -24,12 +24,11 @@ public class HY_GrassDetailRenderer : MonoBehaviour
     [SerializeField] public ComputeShader GrassCompute;
     private ComputeBuffer frustumBuffer;
 
-    private const int GrassInputStride = sizeof(float) * 10;
+    private const int GrassInputStride = sizeof(float) * 16;
 
     private Dictionary<GameObject, List<GrassInstanceInput>> drawDataCache = new();
     private Dictionary<GameObject, ComputeBuffer> inputBufferMap = new();
     Dictionary<(GameObject, int), ComputeBuffer> actualMatrixLODBufferMap = new Dictionary<(GameObject, int), ComputeBuffer>();
-    Dictionary<(GameObject, int), ComputeBuffer> computeArgsLODBufferMap = new Dictionary<(GameObject, int), ComputeBuffer>();
     Dictionary<(GameObject, int, int, Material), ComputeBuffer> indirectArgsSubMeshBufferMap = new Dictionary<(GameObject, int, int, Material), ComputeBuffer>(); // Added Material to key for safety if needed, or just subMeshIndex if material doesn't alter args structure
     Dictionary<(GameObject, int, int, Material), MaterialPropertyBlock> mpbMap = new Dictionary<(GameObject, int, int, Material), MaterialPropertyBlock>();
 
@@ -77,7 +76,6 @@ public class HY_GrassDetailRenderer : MonoBehaviour
 
     private void OnSceneGUI(SceneView sceneView)
     {
-
         if (!Application.isPlaying && hasGrassData)
         {
             RenderGrass();
@@ -254,7 +252,7 @@ public class HY_GrassDetailRenderer : MonoBehaviour
         Vector3 camPos = cam.transform.position;
         float cullDistSqr = grassDataList.maxCullDistance * grassDataList.maxCullDistance;
         Plane[] frustumPlanes = GeometryUtility.CalculateFrustumPlanes(cam);
-        float frustumPadding = 0.5f;
+        float frustumPadding = 0f;
         for (int i = 0; i < frustumPlanes.Length; i++)
         {
             frustumPlanes[i].distance += frustumPadding;
@@ -290,13 +288,22 @@ public class HY_GrassDetailRenderer : MonoBehaviour
                 for (int i = 0; i < lodCount; i++)
                     pooledLodMatrices[i].Clear();
 
-                for (int i = 0; i < matrices.Length; i++)
+                int count = Mathf.Min(matrices.Length, group.instances.Count);
+                for (int i = 0; i < count; i++)
                 {
-                    Vector3 pos = matrices[i].GetColumn(3);
+                    GrassData grass = group.instances[i];
 
-                    Bounds b = new Bounds(pos, new Vector3(1, 1, 1));
+                    // GrassData.baseBounds가 “이미 월드 바운드”라면 바로 사용!
+                    Bounds b = grass.baseBounds;
+
+                    // (baseBounds가 로컬이면, TransformBounds로 변환 필요)
+                    // Bounds b = TransformBounds(grass.baseBounds, grass.position, grass.rotation, grass.scale);
+
                     if (!GeometryUtility.TestPlanesAABB(frustumPlanes, b))
                         continue;
+
+                    Vector3 pos = matrices[i].GetColumn(3);
+
 
                     float distSqr = (camPos - pos).sqrMagnitude;
                     if (distSqr > cullDistSqr) continue;
@@ -340,6 +347,8 @@ public class HY_GrassDetailRenderer : MonoBehaviour
         public Vector3 position;
         public Quaternion rotation;
         public Vector3 scale;
+        public Vector3 boundsCenter;
+        public Vector3 boundsSize;
     }
 
     private void RenderGrassDrawMeshInstancedIndirect()
@@ -397,7 +406,9 @@ public class HY_GrassDetailRenderer : MonoBehaviour
                             {
                                 position = inst.position,
                                 rotation = inst.rotation,
-                                scale = inst.scale
+                                scale = inst.scale,
+                                boundsCenter = inst.baseBounds.center,
+                                boundsSize = inst.baseBounds.size
                             });
                         }
                     }
@@ -426,15 +437,6 @@ public class HY_GrassDetailRenderer : MonoBehaviour
                     actualMatrixLODBufferMap[actualMatrixKey] = currentActualMatrixBuffer;
                 }
                 currentActualMatrixBuffer.SetCounterValue(0);
-
-                var computeArgsKey = (prefab, lod);
-                if (!computeArgsLODBufferMap.TryGetValue(computeArgsKey, out var currentComputeArgsBuffer))
-                {
-                    currentComputeArgsBuffer?.Release();
-                    currentComputeArgsBuffer = new ComputeBuffer(1, sizeof(uint) * 5, ComputeBufferType.IndirectArguments);
-                    computeArgsLODBufferMap[computeArgsKey] = currentComputeArgsBuffer;
-                }
-                currentComputeArgsBuffer.SetData(new uint[5] { 0, 0, 0, 0, 0 });
 
                 if (lod < grassType.lodLevels.Count)
                 {
@@ -473,10 +475,6 @@ public class HY_GrassDetailRenderer : MonoBehaviour
             GrassCompute.SetBuffer(kernel, "_DrawDatasLOD0", actualMatrixLODBufferMap[(prefab, 0)]);
             GrassCompute.SetBuffer(kernel, "_DrawDatasLOD1", actualMatrixLODBufferMap[(prefab, 1)]);
             GrassCompute.SetBuffer(kernel, "_DrawDatasLOD2", actualMatrixLODBufferMap[(prefab, 2)]);
-
-            GrassCompute.SetBuffer(kernel, "_ArgsBufferLOD0", computeArgsLODBufferMap[(prefab, 0)]);
-            GrassCompute.SetBuffer(kernel, "_ArgsBufferLOD1", computeArgsLODBufferMap[(prefab, 1)]);
-            GrassCompute.SetBuffer(kernel, "_ArgsBufferLOD2", computeArgsLODBufferMap[(prefab, 2)]);
 
             if (instanceCount > 0)
             {
@@ -541,13 +539,6 @@ public class HY_GrassDetailRenderer : MonoBehaviour
             foreach (var buffer in actualMatrixLODBufferMap.Values)
                 buffer?.Release();
             actualMatrixLODBufferMap.Clear();
-        }
-
-        if (computeArgsLODBufferMap != null)
-        {
-            foreach (var buffer in computeArgsLODBufferMap.Values)
-                buffer?.Release();
-            computeArgsLODBufferMap.Clear();
         }
 
         if (indirectArgsSubMeshBufferMap != null)

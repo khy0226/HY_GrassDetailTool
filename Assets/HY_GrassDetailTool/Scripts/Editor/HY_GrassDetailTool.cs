@@ -683,10 +683,14 @@ public class HY_GrassDetailTool : EditorWindow
                             float height = Random.Range(proto.minHeight, proto.maxHeight);
                             Vector3 scale = new Vector3(width, height, width); // 기존 방식 유지
 
+                            var baseBounds = GetPrefabBaseBounds(prefab);
+                            var worldBounds = TransformBounds(baseBounds, pos, rot, scale);
+
                             GrassData grass = new GrassData {
                                 position = pos,
                                 rotation = rot,
-                                scale = scale
+                                scale = scale,
+                                baseBounds = worldBounds
                             };
 
                             bool added = grassDataList.AddToZoneInstanceGroup("_DefaultZone", prefab, grass);
@@ -942,6 +946,10 @@ private float GetPrefabVisualSize(GameObject prefab)
                 grassDataList.grassTypes.Add(targetType);
             }
 
+            // 프러스텀 컬링에 사용할 바운드
+            var baseBounds = GetPrefabBaseBounds(prefab);
+            var worldBounds = TransformBounds(baseBounds, obj.transform.position, obj.transform.rotation, obj.transform.localScale);
+
             // LOD 수집, 머티리얼 초기화, 그림자설정
             targetType.LoadLODFromPrefab();
 
@@ -949,7 +957,8 @@ private float GetPrefabVisualSize(GameObject prefab)
             GrassData newGrass = new GrassData {
                 position = obj.transform.position,
                 rotation = obj.transform.rotation,
-                scale = obj.transform.localScale
+                scale = obj.transform.localScale,
+                baseBounds = worldBounds
             };
 
             if (grassDataList.AddToZoneInstanceGroup("_DefaultZone", targetType.prefab, newGrass))
@@ -965,6 +974,50 @@ private float GetPrefabVisualSize(GameObject prefab)
         pendingObjects.Clear();
         RegisterLoadedPrefabs();
         ApplyGrassChanges();
+    }
+
+    public static Bounds GetPrefabBaseBounds(GameObject prefab)
+    {
+        Renderer[] renderers = prefab.GetComponentsInChildren<Renderer>();
+        if (renderers == null || renderers.Length == 0)
+            return new Bounds(Vector3.zero, Vector3.zero);
+
+        Bounds bounds = renderers[0].localBounds;
+        for (int i = 1; i < renderers.Length; i++)
+            bounds.Encapsulate(renderers[i].localBounds);
+        return bounds;
+    }
+
+    public static Bounds TransformBounds(Bounds localBounds, Vector3 pos, Quaternion rot, Vector3 scale)
+    {
+        // 1. 바운드 8개 꼭짓점 계산
+        Vector3[] points = new Vector3[8];
+        Vector3 ext = localBounds.extents;
+        Vector3 cen = localBounds.center;
+
+        int[,] sign = {
+        { -1, -1, -1 }, { -1, -1,  1 },
+        { -1,  1, -1 }, { -1,  1,  1 },
+        {  1, -1, -1 }, {  1, -1,  1 },
+        {  1,  1, -1 }, {  1,  1,  1 }
+    };
+
+        for (int i = 0; i < 8; i++)
+        {
+            Vector3 corner = new Vector3(
+                cen.x + ext.x * sign[i, 0],
+                cen.y + ext.y * sign[i, 1],
+                cen.z + ext.z * sign[i, 2]
+            );
+            // 스케일 적용, 회전 적용, 포지션 적용
+            points[i] = rot * Vector3.Scale(corner, scale) + pos;
+        }
+
+        // 2. AABB로 감싸기
+        Bounds newBounds = new Bounds(points[0], Vector3.zero);
+        for (int i = 1; i < points.Length; i++)
+            newBounds.Encapsulate(points[i]);
+        return newBounds;
     }
 
     private List<GameObject> GetAllChildPrefabs(GameObject parent)
@@ -1472,6 +1525,7 @@ private float GetPrefabVisualSize(GameObject prefab)
     // 자동 비활성화 (Update()에서 실행)
     private void Update()
     {
+#if ENABLE_LEGACY_INPUT_MANAGER
         if (isPlanting)
         {
             // 정해진 시간 동안 아무 입력 없으면 자동으로 비활성화
@@ -1487,6 +1541,7 @@ private float GetPrefabVisualSize(GameObject prefab)
                 plantingStartTime = Time.time; // 타이머 리셋
             }
         }
+#endif
     }
 
     private bool IsPlantingAction()
@@ -1513,6 +1568,10 @@ private float GetPrefabVisualSize(GameObject prefab)
             grassDataList.grassTypes.Add(targetType);
         }
 
+        // 프러스텀 컬링에 사용할 바운드
+        var baseBounds = GetPrefabBaseBounds(selectedPrefab);
+        var worldBounds = TransformBounds(baseBounds, position, rotation, scale);
+
         // LOD 정보 로드 (mesh + material + shadow 수집)
         targetType.LoadLODFromPrefab();
 
@@ -1520,7 +1579,8 @@ private float GetPrefabVisualSize(GameObject prefab)
         GrassData newGrass = new GrassData {
             position = position,
             rotation = rotation,
-            scale = scale
+            scale = scale,
+            baseBounds = worldBounds
         };
 
         // 존 등록

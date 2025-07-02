@@ -413,7 +413,7 @@
     "m_SourceType": 1,
     "m_FunctionName": "instancing_options",
     "m_FunctionSource": "",
-    "m_FunctionBody": "#pragma instancing_options procedural:setup\n\nOut = In;\n\n#pragma multi_compile PROCEDURAL_INSTANCING_ON"
+    "m_FunctionBody": "#pragma instancing_options procedural:setup\n\nOut = In;"
 }
 
 {

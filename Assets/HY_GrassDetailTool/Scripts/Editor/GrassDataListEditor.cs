@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.IO;
 using System.Text.RegularExpressions;
+using System;
 
 [CustomEditor(typeof(GrassDataList))]
 public class GrassDataListEditor : Editor
@@ -29,6 +30,16 @@ public class GrassDataListEditor : Editor
         if (GUILayout.Button("존 자동 분할")) SplitZones(data);
         if (GUILayout.Button("존 모두 통합")) MergeZones(data);
         EditorGUILayout.EndHorizontal();
+
+        GUILayout.Space(10);
+        GUILayout.Label("데이터 압축", EditorStyles.boldLabel);
+        if (GUILayout.Button(new GUIContent("압축", "저장된 위치,회전, 크기값을 소숫점 2자리까지만 남기고 모두 지워서 용량줄입니다." +
+            " \n예) 1.23456 -> 1.23")))
+        {
+            CompressAllGrassData(data, 2);
+            EditorUtility.SetDirty(target);
+            AssetDatabase.SaveAssets();
+        }
 
         GUILayout.Space(10);
         GUILayout.Label("공통 잔디 설정", EditorStyles.boldLabel);
@@ -822,4 +833,46 @@ public class GrassDataListEditor : Editor
         GUIUtility.ExitGUI(); 
     }
 
+    public static void CompressAllGrassData(GrassDataList dataList, int digits = 2)
+    {
+        foreach (var zone in dataList.zones)
+        {
+            foreach (var group in zone.instanceGroups)
+            {
+                foreach (var grass in group.instances)
+                {
+                    grass.position = RoundVector3(grass.position, digits);
+                    grass.scale = RoundVector3(grass.scale, digits);
+                    grass.rotation = RoundQuaternion(grass.rotation, digits);
+                    grass.baseBounds.center = RoundVector3(grass.baseBounds.center, digits);
+                    grass.baseBounds.size = RoundVector3(grass.baseBounds.size, digits);
+                }
+            }
+        }
+    }
+
+    public static float RoundFloat(float value, int digits) =>
+        (float)Math.Round(value, digits, MidpointRounding.AwayFromZero);
+
+    public static Vector3 RoundVector3(Vector3 v, int digits) =>
+        new Vector3(RoundFloat(v.x, digits), RoundFloat(v.y, digits), RoundFloat(v.z, digits));
+
+    public static Quaternion RoundQuaternion(Quaternion q, int digits)
+    {
+        Quaternion rounded = new Quaternion(
+            (float)Math.Round(q.x, digits, MidpointRounding.AwayFromZero),
+            (float)Math.Round(q.y, digits, MidpointRounding.AwayFromZero),
+            (float)Math.Round(q.z, digits, MidpointRounding.AwayFromZero),
+            (float)Math.Round(q.w, digits, MidpointRounding.AwayFromZero)
+        );
+        return NormalizeQuaternion(rounded);
+    }
+
+    public static Quaternion NormalizeQuaternion(Quaternion q)
+    {
+        float mag = Mathf.Sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w);
+        if (mag > 0.0001f)
+            return new Quaternion(q.x / mag, q.y / mag, q.z / mag, q.w / mag);
+        return Quaternion.identity;
+    }
 }

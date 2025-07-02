@@ -75,7 +75,11 @@ void HY_GrassDetailGpuIncludeSG_half(float3 In, out float3 Out)
 
 void setup()
 {
-    SetUnityMatrices(unity_InstanceID, unity_ObjectToWorld, unity_WorldToObject);
+    #ifdef UNITY_PROCEDURAL_INSTANCING_ENABLED
+    {         
+        SetUnityMatrices(unity_InstanceID, unity_ObjectToWorld, unity_WorldToObject);
+    }
+    #endif
 }
 
 #endif 
