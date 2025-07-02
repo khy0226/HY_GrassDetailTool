@@ -237,8 +237,8 @@ public class GrassDataListEditor : Editor
 
     private void ForceRenderUpdateInScene()
     {
-        var renderer = GameObject.FindObjectOfType<HY_GrassDetailRenderer>();
-        if (renderer != null)
+        var renderers = GameObject.FindObjectsOfType<HY_GrassDetailRenderer>();
+        foreach (var renderer in renderers)
         {
             renderer.ForceEnableRender();
             renderer.ApplyInstanceUpdate();
@@ -539,7 +539,7 @@ public class GrassDataListEditor : Editor
         Dictionary<Material, Shader> originalToShaderMap = new();
         HashSet<Material> allOriginalMaterials = new();
 
-        // 1️⃣ Pass 1: 모든 원본 Material 수집
+        // 모든 원본 Material 수집
         foreach (var typeData in data.grassTypes)
         {
             foreach (var lod in typeData.lodLevels)
@@ -558,7 +558,7 @@ public class GrassDataListEditor : Editor
             }
         }
 
-        // 2️⃣ Pass 2: GPU 쉐이더 + GPU 머티리얼 생성
+        // GPU 쉐이더 + GPU 머티리얼 생성
         foreach (var originalMat in allOriginalMaterials)
         {
             Shader originalShader = originalToShaderMap[originalMat];
@@ -660,7 +660,7 @@ public class GrassDataListEditor : Editor
             string folderPath = Path.GetDirectoryName(originalMatPath);
             string newMatPath = Path.Combine(folderPath, originalMat.name + "(GPUMode).mat").Replace("\\", "/");
 
-            // 🎯 기존 머티리얼 존재 시 삭제
+            // 기존 머티리얼 존재 시 삭제
             if (AssetDatabase.LoadAssetAtPath<Material>(newMatPath) != null)
             {
                 AssetDatabase.DeleteAsset(newMatPath);
@@ -680,7 +680,7 @@ public class GrassDataListEditor : Editor
 
         }
 
-        // 3️⃣ Pass 3: 렌더러에 GPU 머티리얼 교체
+        // 렌더러에 GPU 머티리얼 교체
         foreach (var typeData in data.grassTypes)
         {
             foreach (var lod in typeData.lodLevels)

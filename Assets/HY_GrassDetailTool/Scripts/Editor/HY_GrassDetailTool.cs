@@ -1644,22 +1644,22 @@ private float GetPrefabVisualSize(GameObject prefab)
             EditorUtility.SetDirty(grassDataList);
 #endif
 
-            HY_GrassDetailRenderer renderer = FindObjectOfType<HY_GrassDetailRenderer>();
-            if (renderer != null)
+            var renderers = GameObject.FindObjectsOfType<HY_GrassDetailRenderer>();
+            bool anyMatched = false;
+            foreach (var renderer in renderers)
             {
-                if (renderer.grassDataList != grassDataList)
+                if (renderer.grassDataList == grassDataList)
                 {
-                    renderer.SetGrassData(grassDataList);
+                    renderer.ForceEnableRender();
+                    renderer.ApplyInstanceUpdate();
+                    renderer.RenderGrass();
+                    anyMatched = true;
                 }
-                renderer.ForceEnableRender();
-                renderer.ApplyInstanceUpdate();
-                renderer.RenderGrass();
-#if UNITY_EDITOR
-                SceneView.RepaintAll(); 
-#endif
             }
+#if UNITY_EDITOR
+            SceneView.RepaintAll(); 
+#endif            
         }
-
         else
         {
             if (isGrassUpdatePending) return;
@@ -1672,22 +1672,22 @@ private float GetPrefabVisualSize(GameObject prefab)
 #if UNITY_EDITOR
                 EditorUtility.SetDirty(grassDataList);
 #endif
-
-                HY_GrassDetailRenderer renderer = FindObjectOfType<HY_GrassDetailRenderer>();
-                if (renderer != null)
+                var renderers = GameObject.FindObjectsOfType<HY_GrassDetailRenderer>();
+                bool anyMatched = false;
+                foreach (var renderer in renderers)
                 {
-                    if (renderer.grassDataList != grassDataList)
-                        renderer.SetGrassData(grassDataList);
-
-                    renderer.ForceEnableRender();
-                    renderer.ApplyInstanceUpdate();
-                    renderer.RenderGrass();
-
-#if UNITY_EDITOR
-                    SceneView.RepaintAll();
-#endif
+                    if (renderer.grassDataList == grassDataList)
+                    {
+                        renderer.ForceEnableRender();
+                        renderer.ApplyInstanceUpdate();
+                        renderer.RenderGrass();
+                        anyMatched = true;
+                    }
                 }
 
+#if UNITY_EDITOR
+                SceneView.RepaintAll();
+#endif               
                 isGrassUpdatePending = false;
             };
         }
@@ -1782,16 +1782,18 @@ private float GetPrefabVisualSize(GameObject prefab)
         // 프리팹 목록에 추가
         RegisterLoadedPrefabs();
 
-        // 데이터를 반영
-        HY_GrassDetailRenderer renderer = FindObjectOfType<HY_GrassDetailRenderer>();
-        if (renderer != null)
+        // 씬 내 모든 HY_GrassDetailRenderer 가져오기
+        var renderers = GameObject.FindObjectsOfType<HY_GrassDetailRenderer>();
+        bool anyMatched = false;
+        foreach (var renderer in renderers)
         {
-            renderer.SetGrassData(grassDataList);
-            Debug.Log("HY_GrassDetailRenderer에 새로운 데이터 적용 완료!");
-        }
-        else
-        {
-            Debug.LogWarning("HY_GrassDetailRenderer가 씬에 없습니다!");
+            // 이미 연결되어 있으면, 불러온 데이터로 갱신
+            if (renderer.grassDataList == grassDataList)
+            {
+                renderer.SetGrassData(grassDataList);
+                Debug.Log("HY_GrassDetailRenderer에 새로운 데이터 적용 완료!");
+                anyMatched = true;
+            }
         }
     }
 
