@@ -79,7 +79,8 @@ public class HY_GrassDetailRenderer : MonoBehaviour
         if (!Application.isPlaying && hasGrassData)
         {
             RenderGrass();
-        }
+            EditorApplication.QueuePlayerLoopUpdate(); // 씬 뷰 에서 느려진거 해결해줌
+        }
     }
 
     private void OnValidate()
