@@ -178,6 +178,9 @@ public class GrassDataList : ScriptableObject
     [Header("공통 설정")]
     public float maxCullDistance = 100f; // 전역 최대 거리
     public bool useGlobalLOD = true;
+    public bool shadowFrustumCulling = true;
+    public bool shadowURPDistance = true;
+    public float shadowDistance = 50f;
 
     public enum RenderMode { DrawMeshInstanced, DrawMeshInstancedIndirect };
     [Header("렌더링 방식 설정")]
@@ -213,6 +216,7 @@ public class GrassDataList : ScriptableObject
 
         return false;
     }
+
 
 }
 

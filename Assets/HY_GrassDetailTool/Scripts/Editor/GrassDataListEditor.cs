@@ -46,26 +46,36 @@ public class GrassDataListEditor : Editor
         data.maxCullDistance = EditorGUILayout.FloatField("Max Cull Distance", data.maxCullDistance);
         data.useGlobalLOD = EditorGUILayout.Toggle("Use Global LOD", data.useGlobalLOD);
 
+        data.shadowURPDistance = EditorGUILayout.Toggle("Shadow URP Distance", data.shadowURPDistance);
+        if (!data.shadowURPDistance)
+        {
+            data.shadowDistance = EditorGUILayout.FloatField("Shadow Diatance", data.shadowDistance);
+        }
+        data.shadowFrustumCulling = EditorGUILayout.Toggle(new GUIContent("Shadow Frustum Culling","화면에 들어오지 않았을때 컬링 여부를 결정합니다." +
+            "\n 비활성화 할경우 다른곳을 바라볼때 그림자가 사라지는것을 방지합니다."), data.shadowFrustumCulling);
+
         GUILayout.Space(10);
         GUILayout.Label("렌더링 방식 설정", EditorStyles.boldLabel);
 
         EditorGUI.BeginChangeCheck();
         data.renderMode = (GrassDataList.RenderMode)EditorGUILayout.EnumPopup("렌더링 모드", data.renderMode);
         if (EditorGUI.EndChangeCheck())
-        {
+        {            
             switch (data.renderMode)
             {
                 case GrassDataList.RenderMode.DrawMeshInstancedIndirect:
                     ApplyGPUModeMaterials(data);
+                    EditorUtility.SetDirty(data);
+                    AssetDatabase.SaveAssets();
                     break;
 
                 case GrassDataList.RenderMode.DrawMeshInstanced:
                     RestoreOriginalMaterials(data);
+                    EditorUtility.SetDirty(data);
+                    AssetDatabase.SaveAssets();
                     break;
-            }
+            }            
         }
-
-
 
         GUILayout.Space(15);
         GUILayout.Label("프리팹 설정", EditorStyles.boldLabel);
@@ -119,6 +129,10 @@ public class GrassDataListEditor : Editor
 
             typeData.hasShadow = EditorGUILayout.Toggle("그림자 사용", typeData.hasShadow);
 
+            if (EditorGUI.EndChangeCheck())
+            {
+                EditorUtility.SetDirty(data);
+            }
             GUILayout.Space(5);
 
             // 프리팹 루프 내부에서
@@ -258,6 +272,7 @@ public class GrassDataListEditor : Editor
             float cellWidth = data.mapSize.x / data.divisionCountX;
             float cellHeight = data.mapSize.y / data.divisionCountY;
 
+            float verticalSize = Mathf.Max(data.mapSize.x, data.mapSize.y);
             int totalZones = data.divisionCountX * data.divisionCountY;
             int current = 0;
 
@@ -269,10 +284,16 @@ public class GrassDataListEditor : Editor
                     float progress = (float)current / totalZones;
                     EditorUtility.DisplayProgressBar("Zone 자동 분할", $"Zone {current}/{totalZones} 생성 중...", progress);
 
+                    // Bounds를 위한 3D 중심점과 크기 계산
+                    Vector2 center2D = new Vector2((x + 0.5f) * cellWidth, (y + 0.5f) * cellHeight);
+                    Vector3 boundsCenter = new Vector3(center2D.x, 0, center2D.y);
+                    Vector3 boundsSize = new Vector3(cellWidth, verticalSize, cellHeight);
+
                     GrassZone newZone = new GrassZone {
                         zoneName = $"Zone_{x}_{y}",
                         zoneSize = Mathf.Max(cellWidth, cellHeight),
                         zoneCenter = new Vector2((x + 0.5f) * cellWidth, (y + 0.5f) * cellHeight),
+                        bounds = new Bounds(boundsCenter, boundsSize),
                         instanceGroups = new List<GrassZoneInstanceGroup>()
                     };
                     data.zones.Add(newZone);
@@ -283,7 +304,7 @@ public class GrassDataListEditor : Editor
 
             EditorUtility.DisplayProgressBar("Zone 자동 분할", "DefaultZone 데이터를 분배 중...", 0.99f);
             AutoDistributeDefaultZone(data); // 분배
-
+            RecalculateAllZoneBounds(data);
             ForceRenderUpdateInScene();
         }
         finally
@@ -302,10 +323,14 @@ public class GrassDataListEditor : Editor
             MoveAllToDefaultZone(data);
             data.zones.RemoveAll(z => z.zoneName != "_DefaultZone");
 
+            Vector3 boundsCenter = new Vector3(data.mapSize.x * 0.5f, 0, data.mapSize.y * 0.5f);
+            Vector3 boundsSize = new Vector3(data.mapSize.x, Mathf.Max(data.mapSize.x, data.mapSize.y), data.mapSize.y);
+
             GrassZone mergedZone = new GrassZone {
                 zoneName = "Zone_0_0",
                 zoneCenter = data.mapSize * 0.5f,
                 zoneSize = Mathf.Max(data.mapSize.x, data.mapSize.y),
+                bounds = new Bounds(boundsCenter, boundsSize),
                 instanceGroups = new List<GrassZoneInstanceGroup>()
             };
 
@@ -330,7 +355,7 @@ public class GrassDataListEditor : Editor
                 var (prefab, grass) = allInstances[i];
                 data.AddToZoneInstanceGroup("Zone_0_0", prefab, grass);
             }
-
+            RecalculateAllZoneBounds(data);
             ForceRenderUpdateInScene();
         }
         finally
@@ -345,10 +370,14 @@ public class GrassDataListEditor : Editor
         GrassZone defaultZone = data.zones.FirstOrDefault(z => z.zoneName == "_DefaultZone");
         if (defaultZone == null)
         {
+            Vector3 boundsCenter = new Vector3(data.mapSize.x * 0.5f, 0, data.mapSize.y * 0.5f);
+            Vector3 boundsSize = new Vector3(data.mapSize.x, Mathf.Max(data.mapSize.x, data.mapSize.y), data.mapSize.y);
+
             defaultZone = new GrassZone {
                 zoneName = "_DefaultZone",
                 zoneCenter = data.mapSize * 0.5f,
                 zoneSize = Mathf.Max(data.mapSize.x, data.mapSize.y),
+                bounds = new Bounds(boundsCenter, boundsSize),
                 instanceGroups = new List<GrassZoneInstanceGroup>()
             };
             data.zones.Add(defaultZone);
@@ -429,6 +458,44 @@ public class GrassDataListEditor : Editor
         }
     }
 
+    public static void RecalculateAllZoneBounds(GrassDataList data)
+    {
+        foreach (var zone in data.zones)
+        {
+            // 존에 인스턴스가 없으면 처리하지 않음
+            if (zone.instanceGroups == null || !zone.instanceGroups.Any(g => g.instances.Any()))
+            {
+                continue;
+            }
+
+            // 모든 인스턴스를 순회하며 최소/최대 높이(Y)를 찾습니다.
+            float minY = float.MaxValue;
+            float maxY = float.MinValue;
+
+            foreach (var group in zone.instanceGroups)
+            {
+                foreach (var instance in group.instances)
+                {
+                    minY = Mathf.Min(minY, instance.baseBounds.min.y);
+                    maxY = Mathf.Max(maxY, instance.baseBounds.max.y);
+                }
+            }
+
+            // 현재 Bounds의 중심과 크기를 가져옵니다.
+            var currentBounds = zone.bounds;
+            var center = currentBounds.center;
+            var size = currentBounds.size;
+
+            // 계산된 높이(Y)를 사용하여 새로운 중심과 크기를 설정합니다.
+            float height = maxY - minY;
+            center.y = minY + height * 0.5f; // Y 중심점 조정
+            size.y = height;                 // Y 크기 조정
+
+            // 최종적으로 수정된 Bounds를 존에 다시 할당합니다.
+            zone.bounds = new Bounds(center, size);
+        }
+    }
+
     public static string CalculateZoneName(Vector3 position, GrassDataList data)
     {
         int x = Mathf.FloorToInt(position.x / (data.mapSize.x / data.divisionCountX));
@@ -478,7 +545,7 @@ public class GrassDataListEditor : Editor
                     {
                         ApplyGPUModeMaterials(data);
                     }
-
+                    
                     pendingNewPrefab = null;
                     pendingTargetTypeData = null;
                     GUI.FocusControl(null);

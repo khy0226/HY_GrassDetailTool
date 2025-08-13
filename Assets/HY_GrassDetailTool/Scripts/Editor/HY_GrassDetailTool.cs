@@ -990,7 +990,7 @@ private float GetPrefabVisualSize(GameObject prefab)
 
     public static Bounds TransformBounds(Bounds localBounds, Vector3 pos, Quaternion rot, Vector3 scale)
     {
-        // 1. 바운드 8개 꼭짓점 계산
+        // 바운드 8개 꼭짓점 계산
         Vector3[] points = new Vector3[8];
         Vector3 ext = localBounds.extents;
         Vector3 cen = localBounds.center;
@@ -1013,7 +1013,7 @@ private float GetPrefabVisualSize(GameObject prefab)
             points[i] = rot * Vector3.Scale(corner, scale) + pos;
         }
 
-        // 2. AABB로 감싸기
+        // AABB로 감싸기
         Bounds newBounds = new Bounds(points[0], Vector3.zero);
         for (int i = 1; i < points.Length; i++)
             newBounds.Encapsulate(points[i]);
@@ -1598,16 +1598,28 @@ private float GetPrefabVisualSize(GameObject prefab)
             return;
         }
 
+        if (selectedPrefabIndex < 0 || selectedPrefabIndex >= grassPrefabs.Count)
+        {
+            Debug.LogWarning("선택된 프리팹이 없습니다. 삭제하려면 먼저 프리팹을 선택하세요.");
+            return;
+        }
+
+        GameObject targetPrefab = grassPrefabs[selectedPrefabIndex];
+
         int removedCount = 0;
 
         // 제거할 프리팹 목록
-        List<string> removedGroupNames = new List<string>();
 
-        foreach (var zone in grassDataList.zones)
+        for (int z = 0; z < grassDataList.zones.Count; z++)
         {
+            var zone = grassDataList.zones[z];
+
             for (int g = zone.instanceGroups.Count - 1; g >= 0; g--)
             {
                 var group = zone.instanceGroups[g];
+
+                if (group.prefab != targetPrefab)
+                    continue;
 
                 for (int i = group.instances.Count - 1; i >= 0; i--)
                 {
@@ -1619,10 +1631,9 @@ private float GetPrefabVisualSize(GameObject prefab)
                     }
                 }
 
-                // 해당 그룹에 인스턴스가 하나도 없으면 그룹 삭제
+                // 빈 그룹은 정리
                 if (group.instances.Count == 0)
                 {
-                    removedGroupNames.Add(group.prefab.name);
                     zone.instanceGroups.RemoveAt(g);
                 }
             }

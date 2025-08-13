@@ -1,4 +1,5 @@
 #pragma kernel CSMain
+#pragma kernel CSMainShadow
 
 struct GrassInstanceInput 
 {
@@ -28,13 +29,18 @@ AppendStructuredBuffer<DrawData> _DrawDatasLOD0;
 AppendStructuredBuffer<DrawData> _DrawDatasLOD1;
 AppendStructuredBuffer<DrawData> _DrawDatasLOD2;
 
+AppendStructuredBuffer<DrawData> _DrawShadowDatasLOD0;
+AppendStructuredBuffer<DrawData> _DrawShadowDatasLOD1;
+AppendStructuredBuffer<DrawData> _DrawShadowDatasLOD2;
 
 cbuffer CameraData
 {
     float3 _CameraPos;
     float _MaxDistance;
+    float _ShadowDistance;
     float _LOD0Distance;
     float _LOD1Distance;
+    int _ShadowFrustumCulling;
 };
 
 bool TestAABBFrustum(float3 center, float3 size, StructuredBuffer<float4> planes)
@@ -70,6 +76,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 
     GrassInstanceInput input = _InputData[i];
     float dist = distance(input.position, _CameraPos);
+
     if (dist > _MaxDistance) return;
     if (!TestAABBFrustum(input.boundsCenter, input.boundsSize, _FrustumPlanes)) return;
 
@@ -89,5 +96,41 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     else
     {
         _DrawDatasLOD2.Append(data);
+    }
+}
+
+[numthreads(64, 1, 1)]
+void CSMainShadow(uint3 id : SV_DispatchThreadID)
+{
+    uint i = id.x;
+    if (i >= _InputData.Length) return;
+
+    GrassInstanceInput input = _InputData[i];
+    float dist = distance(input.position, _CameraPos);
+
+    float shadowCullDist = min(_MaxDistance, _ShadowDistance);
+    if (dist > shadowCullDist) return;
+
+    if (_ShadowFrustumCulling == 1)
+    {
+        if (!TestAABBFrustum(input.boundsCenter, input.boundsSize, _FrustumPlanes)) return;
+    }
+
+    DrawData data;
+    data.position = input.position;
+    data.rotation = input.rotation;
+    data.scale = input.scale;
+
+    if (dist <= _LOD0Distance)
+    {
+        _DrawShadowDatasLOD0.Append(data);
+    }
+    else if (dist <= _LOD1Distance)
+    {
+        _DrawShadowDatasLOD1.Append(data);
+    }
+    else
+    {
+        _DrawShadowDatasLOD2.Append(data);
     }
 }

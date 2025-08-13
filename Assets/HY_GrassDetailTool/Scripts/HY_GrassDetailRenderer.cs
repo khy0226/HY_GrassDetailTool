@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 using Unity.Collections;
+using UnityEngine.Rendering.Universal;
 
 #if UNITY_EDITOR
 using UnityEditor;
@@ -18,6 +19,10 @@ public class HY_GrassDetailRenderer : MonoBehaviour
 
     private Dictionary<GameObject, Material> materialMap = new Dictionary<GameObject, Material>();
 
+    // 드로메쉬인스턴스의 그림자 컬링 관련
+    private readonly List<List<Matrix4x4>> pooledLodMatrices_ShadowOn = new();
+    private readonly List<List<Matrix4x4>> pooledLodMatrices_ShadowOff = new();
+
     private bool hasGrassData = false;
     private bool isDataDirty = true;
 
@@ -29,7 +34,9 @@ public class HY_GrassDetailRenderer : MonoBehaviour
     private Dictionary<GameObject, List<GrassInstanceInput>> drawDataCache = new();
     private Dictionary<GameObject, ComputeBuffer> inputBufferMap = new();
     Dictionary<(GameObject, int), ComputeBuffer> actualMatrixLODBufferMap = new Dictionary<(GameObject, int), ComputeBuffer>();
+    Dictionary<(GameObject, int), ComputeBuffer> actualMatrixLODBufferMapShadow = new Dictionary<(GameObject, int), ComputeBuffer>();
     Dictionary<(GameObject, int, int, Material), ComputeBuffer> indirectArgsSubMeshBufferMap = new Dictionary<(GameObject, int, int, Material), ComputeBuffer>(); // Added Material to key for safety if needed, or just subMeshIndex if material doesn't alter args structure
+    Dictionary<(GameObject, int, int, Material), ComputeBuffer> indirectArgsSubMeshBufferMapShadow = new Dictionary<(GameObject, int, int, Material), ComputeBuffer>(); // Added Material to key for safety if needed, or just subMeshIndex if material doesn't alter args structure
     Dictionary<(GameObject, int, int, Material), MaterialPropertyBlock> mpbMap = new Dictionary<(GameObject, int, int, Material), MaterialPropertyBlock>();
 
     private void OnEnable()
@@ -224,10 +231,14 @@ public class HY_GrassDetailRenderer : MonoBehaviour
 
     private void EnsurePooledLodListCapacity(int requiredCount)
     {
-        if (pooledLodMatrices.Count < requiredCount)
+        while (pooledLodMatrices_ShadowOn.Count < requiredCount)
         {
-            for (int i = pooledLodMatrices.Count; i < requiredCount; i++)
-                pooledLodMatrices.Add(new List<Matrix4x4>());
+            pooledLodMatrices_ShadowOn.Add(new List<Matrix4x4>());
+        }
+
+        while (pooledLodMatrices_ShadowOff.Count < requiredCount)
+        {
+            pooledLodMatrices_ShadowOff.Add(new List<Matrix4x4>());
         }
     }
 
@@ -245,14 +256,37 @@ public class HY_GrassDetailRenderer : MonoBehaviour
         }
     }
 
+    private float ShadowDiatance()
+    {
+        var urpAsset = GraphicsSettings.currentRenderPipeline as UniversalRenderPipelineAsset;
+        float shadowDist = urpAsset != null ? urpAsset.shadowDistance : 50f;
+
+        float final = 50f;
+
+        if (grassDataList.shadowURPDistance)
+        {
+            final = shadowDist;
+        }
+        else 
+        {
+            final = grassDataList.shadowDistance;
+        }
+
+        return final;
+    }
+
     private void RenderGrassDrawMeshInstanced()
     {
         Camera cam = GetRenderCamera();
         if (!hasGrassData || cam == null) return;
 
+        float shadowDist = ShadowDiatance();
+        float shadowDistSqr = shadowDist * shadowDist;
+
         Vector3 camPos = cam.transform.position;
         float cullDistSqr = grassDataList.maxCullDistance * grassDataList.maxCullDistance;
         Plane[] frustumPlanes = GeometryUtility.CalculateFrustumPlanes(cam);
+
         float frustumPadding = 0f;
         for (int i = 0; i < frustumPlanes.Length; i++)
         {
@@ -287,56 +321,78 @@ public class HY_GrassDetailRenderer : MonoBehaviour
                 EnsurePooledLodListCapacity(lodCount);
 
                 for (int i = 0; i < lodCount; i++)
-                    pooledLodMatrices[i].Clear();
+                {
+                    pooledLodMatrices_ShadowOn[i].Clear();
+                    pooledLodMatrices_ShadowOff[i].Clear();
+                }
 
                 int count = Mathf.Min(matrices.Length, group.instances.Count);
                 for (int i = 0; i < count; i++)
                 {
                     GrassData grass = group.instances[i];
+                    Matrix4x4 matrix = matrices[i];
+                    Vector3 pos = matrix.GetColumn(3);
 
-                    // GrassData.baseBounds가 “이미 월드 바운드”라면 바로 사용!
-                    Bounds b = grass.baseBounds;
-
-                    // (baseBounds가 로컬이면, TransformBounds로 변환 필요)
-                    // Bounds b = TransformBounds(grass.baseBounds, grass.position, grass.rotation, grass.scale);
-
-                    if (!GeometryUtility.TestPlanesAABB(frustumPlanes, b))
-                        continue;
-
-                    Vector3 pos = matrices[i].GetColumn(3);
-
-
-                    float distSqr = (camPos - pos).sqrMagnitude;
+                    float distSqr = (pos - camPos).sqrMagnitude;
                     if (distSqr > cullDistSqr) continue;
 
-                    float normDist = Mathf.Sqrt(distSqr) / grassDataList.maxCullDistance;
-                    int lodIndex = GetLODIndex(typeData, normDist);
+                    int lodIndex = GetLODIndex(typeData, Mathf.Sqrt(distSqr) / grassDataList.maxCullDistance);
+                    if (lodIndex < 0 || lodIndex >= lodCount) continue;
 
-                    if (lodIndex >= 0 && lodIndex < lodCount)
-                        pooledLodMatrices[lodIndex].Add(matrices[i]);
+                    bool isInFrustum = GeometryUtility.TestPlanesAABB(frustumPlanes, grass.baseBounds);
+                    bool canCastShadow = typeData.hasShadow && distSqr < shadowDistSqr;
+
+                    if (isInFrustum)
+                    {
+                        pooledLodMatrices_ShadowOff[lodIndex].Add(matrix);
+                    }
+
+                    if (canCastShadow)
+                    {
+                        if (!grassDataList.shadowFrustumCulling || isInFrustum)
+                        {
+                            pooledLodMatrices_ShadowOn[lodIndex].Add(matrix);
+                        }
+                    }
                 }
 
-                for (int lodIdx = 0; lodIdx < lodCount; lodIdx++)
+                for (int lodIdx = 0; lodIdx < lodCount; lodIdx++)
                 {
-                    var lodList = pooledLodMatrices[lodIdx];
+                    var lodList = pooledLodMatrices_ShadowOff[lodIdx]; // '보이는 메쉬' 목록
                     if (lodList.Count == 0) continue;
 
                     var renderers = typeData.lodLevels[lodIdx].renderers;
-
                     foreach (var elem in renderers)
                     {
                         if (elem.mesh == null || elem.material == null) continue;
-
-                        Graphics.DrawMeshInstanced(
-                          elem.mesh,
-                          elem.subMeshIndex,
-                          elem.material,
-                          lodList,
-                          null,
-                          shadow ? ShadowCastingMode.On : ShadowCastingMode.Off,
-                          true,
-                          gameObject.layer
+                        Graphics.DrawMeshInstanced(elem.mesh,
+                            elem.subMeshIndex,
+                            elem.material, 
+                            lodList, 
+                            null, 
+                            ShadowCastingMode.Off
                         );
+                    }
+                }
+
+                if (typeData.hasShadow)
+                {
+                    for (int lodIdx = 0; lodIdx < lodCount; lodIdx++)
+                    {
+                        var lodList = pooledLodMatrices_ShadowOn[lodIdx];
+                        if (lodList.Count == 0) continue;
+
+                        var renderers = typeData.lodLevels[lodIdx].renderers;
+                        foreach (var elem in renderers)
+                        {
+                            if (elem.mesh == null || elem.material == null) continue;
+                            Graphics.DrawMeshInstanced(elem.mesh, 
+                                elem.subMeshIndex, elem.material, 
+                                lodList, 
+                                null, 
+                                ShadowCastingMode.ShadowsOnly
+                            );
+                        }
                     }
                 }
             }
@@ -356,6 +412,8 @@ public class HY_GrassDetailRenderer : MonoBehaviour
     {
         Camera cam = GetRenderCamera();
         if (!hasGrassData || cam == null) return;
+
+        float shadowDist = ShadowDiatance();
 
         Vector3 camPos = cam.transform.position;
 
@@ -382,9 +440,11 @@ public class HY_GrassDetailRenderer : MonoBehaviour
         }
 
         int kernel = GrassCompute.FindKernel("CSMain");
+        int kernelShadow = GrassCompute.FindKernel("CSMainShadow");
 
         frustumBuffer.SetData(gpuPlanes);
         GrassCompute.SetBuffer(kernel, "_FrustumPlanes", frustumBuffer);
+        GrassCompute.SetBuffer(kernelShadow, "_FrustumPlanes", frustumBuffer);
 
         foreach (var grassType in grassDataList.grassTypes)
         {
@@ -439,24 +499,46 @@ public class HY_GrassDetailRenderer : MonoBehaviour
                 }
                 currentActualMatrixBuffer.SetCounterValue(0);
 
+                var shadowMatrixKey = (prefab, lod);
+                if (!actualMatrixLODBufferMapShadow.TryGetValue(shadowMatrixKey, out var currentActualMatrixBufferShadow) || currentActualMatrixBufferShadow.count != instanceCount)
+                {
+                    currentActualMatrixBufferShadow?.Release();
+                    currentActualMatrixBufferShadow = new ComputeBuffer(instanceCount, 40, ComputeBufferType.Append);
+                    actualMatrixLODBufferMapShadow[shadowMatrixKey] = currentActualMatrixBufferShadow;
+                }
+                currentActualMatrixBufferShadow.SetCounterValue(0);
+
                 if (lod < grassType.lodLevels.Count)
                 {
                     var lodLevelData = grassType.lodLevels[lod];
                     foreach (var rend in lodLevelData.renderers)
                     {
                         if (rend.mesh == null) continue;
+
                         var indirectArgsKey = (prefab, lod, rend.subMeshIndex, rend.material);
+
+                        // 잔디 버퍼 처리
                         if (!indirectArgsSubMeshBufferMap.TryGetValue(indirectArgsKey, out var currentIndirectArgsBuffer))
                         {
-                            currentIndirectArgsBuffer?.Release();
                             currentIndirectArgsBuffer = new ComputeBuffer(1, sizeof(uint) * 5, ComputeBufferType.IndirectArguments);
                             indirectArgsSubMeshBufferMap[indirectArgsKey] = currentIndirectArgsBuffer;
+                        }
+
+                        // 그림자 버퍼 처리
+                        if (!indirectArgsSubMeshBufferMapShadow.TryGetValue(indirectArgsKey, out var currentIndirectArgsBufferShadow))
+                        {
+                            currentIndirectArgsBufferShadow = new ComputeBuffer(1, sizeof(uint) * 5, ComputeBufferType.IndirectArguments);
+                            indirectArgsSubMeshBufferMapShadow[indirectArgsKey] = currentIndirectArgsBufferShadow;
                         }
 
                         uint indexCountSubmesh = (uint)rend.mesh.GetIndexCount(rend.subMeshIndex);
                         uint indexStartSubmesh = (uint)rend.mesh.GetIndexStart(rend.subMeshIndex);
                         uint baseVertexSubmesh = (uint)rend.mesh.GetBaseVertex(rend.subMeshIndex);
-                        currentIndirectArgsBuffer.SetData(new uint[5] { indexCountSubmesh, 0, indexStartSubmesh, baseVertexSubmesh, 0 });
+
+                        uint[] args = new uint[5] { indexCountSubmesh, 0, indexStartSubmesh, baseVertexSubmesh, 0 };
+
+                        currentIndirectArgsBuffer.SetData(args);
+                        currentIndirectArgsBufferShadow.SetData(args);
                     }
                 }
             }
@@ -468,8 +550,13 @@ public class HY_GrassDetailRenderer : MonoBehaviour
             GrassCompute.SetFloat("_LOD1Distance", lod1Distance);
 
             GrassCompute.SetBuffer(kernel, "_InputData", inputBuffer);
+            if (grassType.hasShadow)
+            {
+                GrassCompute.SetBuffer(kernelShadow, "_InputData", inputBuffer);
+            }
             GrassCompute.SetVector("_CameraPos", camPos);
             GrassCompute.SetFloat("_MaxDistance", grassDataList.maxCullDistance);
+            GrassCompute.SetFloat("_ShadowDistance", shadowDist);
 
             GrassCompute.SetInt("_InstanceCount", instanceCount);
 
@@ -477,11 +564,24 @@ public class HY_GrassDetailRenderer : MonoBehaviour
             GrassCompute.SetBuffer(kernel, "_DrawDatasLOD1", actualMatrixLODBufferMap[(prefab, 1)]);
             GrassCompute.SetBuffer(kernel, "_DrawDatasLOD2", actualMatrixLODBufferMap[(prefab, 2)]);
 
+            if (grassType.hasShadow)
+            {
+                GrassCompute.SetBuffer(kernelShadow, "_DrawShadowDatasLOD0", actualMatrixLODBufferMapShadow[(prefab, 0)]);
+                GrassCompute.SetBuffer(kernelShadow, "_DrawShadowDatasLOD1", actualMatrixLODBufferMapShadow[(prefab, 1)]);
+                GrassCompute.SetBuffer(kernelShadow, "_DrawShadowDatasLOD2", actualMatrixLODBufferMapShadow[(prefab, 2)]);
+            }
+
             if (instanceCount > 0)
             {
                 GrassCompute.Dispatch(kernel, Mathf.CeilToInt(instanceCount / 64f), 1, 1);
-            }
 
+                if (grassType.hasShadow)
+                {
+                    GrassCompute.SetInt("_ShadowFrustumCulling", grassDataList.shadowFrustumCulling ? 1 : 0);
+                    GrassCompute.Dispatch(kernelShadow, Mathf.CeilToInt(instanceCount / 64f), 1, 1);
+                }
+            }      
+            
             for (int lodIndex = 0; lodIndex < grassType.lodLevels.Count; lodIndex++)
             {
                 var lodLevel = grassType.lodLevels[lodIndex];
@@ -524,10 +624,62 @@ public class HY_GrassDetailRenderer : MonoBehaviour
                       indirectArgsBufferForSubmesh,
                       0,
                       mpb,
-                      grassType.hasShadow ? ShadowCastingMode.On : ShadowCastingMode.Off,
+                      ShadowCastingMode.Off,
                       true,
                       gameObject.layer
                     );
+                }
+            }
+            
+            if (grassType.hasShadow == true) 
+            {
+                for (int lodIndex = 0; lodIndex < grassType.lodLevels.Count; lodIndex++)
+                {
+                    var lodLevel = grassType.lodLevels[lodIndex];
+                    if (lodLevel.renderers == null || lodLevel.renderers.Count == 0) continue;
+
+                    var currentActualMatrixLODBufferShadow = actualMatrixLODBufferMapShadow[(prefab, lodIndex)];
+
+                    foreach (var rend in lodLevel.renderers)
+                    {
+                        var mesh = rend.mesh;
+                        var mat = rend.material;
+                        int subMesh = rend.subMeshIndex;
+
+                        if (mesh == null || mat == null) continue;
+
+                        var indirectArgsKey = (prefab, lodIndex, subMesh, mat);
+                        var indirectArgsBufferForSubmeshShadow = indirectArgsSubMeshBufferMapShadow[indirectArgsKey];
+
+                        ComputeBuffer.CopyCount(currentActualMatrixLODBufferShadow, indirectArgsBufferForSubmeshShadow, sizeof(uint));
+
+                        var mpbKey = (prefab, lodIndex, subMesh, mat);
+                        if (!mpbMap.TryGetValue(mpbKey, out var mpb))
+                        {
+                            mpb = new MaterialPropertyBlock();
+                            mpbMap[mpbKey] = mpb;
+                        }
+                        else
+                        {
+                            mpb.Clear();
+                        }
+
+                        mpb.SetBuffer("_Matrices", currentActualMatrixLODBufferShadow);
+                        mat.enableInstancing = true;
+
+                        Graphics.DrawMeshInstancedIndirect(
+                          mesh,
+                          subMesh,
+                          mat,
+                          bounds,
+                          indirectArgsBufferForSubmeshShadow,
+                          0,
+                          mpb,
+                          ShadowCastingMode.ShadowsOnly,
+                          true,
+                          gameObject.layer
+                        );
+                    }
                 }
             }
         }
@@ -540,6 +692,13 @@ public class HY_GrassDetailRenderer : MonoBehaviour
             foreach (var buffer in actualMatrixLODBufferMap.Values)
                 buffer?.Release();
             actualMatrixLODBufferMap.Clear();
+        }
+
+        if (actualMatrixLODBufferMapShadow != null)
+        {
+            foreach (var buffer in actualMatrixLODBufferMapShadow.Values)
+                buffer?.Release();
+            actualMatrixLODBufferMapShadow.Clear();
         }
 
         if (indirectArgsSubMeshBufferMap != null)
